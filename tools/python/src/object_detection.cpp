@@ -159,7 +159,15 @@ solver more accurate but might take longer to train.")
                                      &type::num_threads,
 "train_simple_object_detector() will use this many threads of \n\
 execution.  Set this to the number of CPU cores on your machine to \n\
-obtain the fastest training speed.");
+obtain the fastest training speed.")
+        .add_property("upsample_limit", &type::upsample_limit,
+                                        &type::upsample_limit,
+"train_simple_object_detector() will upsample images if needed \n\
+no more than upsample_limit times. Value 0 will forbid trainer to \n\
+upsample any images. If trainer is unable to fit all boxes with \n\
+required upsample_limit, exception will be thrown. Higher values \n\
+of upsample_limit exponentially increases memory requiremens. \n\
+Values higher than 2 (default) are not recommended.");
     }
     {
     typedef simple_test_results type;
@@ -320,7 +328,7 @@ ensures \n\
       detector.  If you don't know how many times you want to upsample then \n\
       don't provide a value for upsample_num_times and an appropriate \n\
       default will be used.")
-        .def("run", run_rect_detector, (arg("image"), arg("upsample_num_times")=0),
+        .def("run", run_rect_detector, (arg("image"), arg("upsample_num_times")=0, arg("adjust_threshold")=0.0),
 "requires \n\
     - image is a numpy ndarray containing either an 8bit grayscale or RGB \n\
       image. \n\
@@ -342,7 +350,7 @@ ensures \n\
         .def("__init__", make_constructor(&load_object_from_file<type>),
 "Loads a simple_object_detector from a file that contains the output of the \n\
 train_simple_object_detector() routine.")
-        .def("__call__", &type::run_detector1, (arg("image"), arg("upsample_num_times")),
+        .def("__call__", &type::run_detector1, (arg("image"), arg("upsample_num_times"), arg("adjust_threshold")=0.0),
 "requires \n\
     - image is a numpy ndarray containing either an 8bit grayscale or RGB \n\
       image. \n\

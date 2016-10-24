@@ -327,7 +327,8 @@
          <div class="component"  >
       
          <a href="#top"><font size='2'><center>[top]</center></font></a>
-         <h1 style="margin:0px;"><xsl:value-of select="name"/></h1>
+         <h1 style="margin:0px;"><xsl:value-of select="name"/> 
+         </h1>
          <BR/>
          <BR/>
          <xsl:apply-templates select="description"/>
@@ -701,6 +702,9 @@
       <table>
          <xsl:apply-templates/>
        </table>
+   </xsl:template>   
+   <xsl:template match="more_details">
+      <a style="float:none" class='more_details'>More Details...</a>
    </xsl:template>   
    <xsl:template match="div">
       <div id="{@id}"><xsl:apply-templates/></div>

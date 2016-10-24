@@ -10,8 +10,10 @@ To build the dlib:
     python setup.py build
 To build and install:
     python setup.py install
-To package the wheel:
+To package the wheel (after pip installing twine and wheel):
     python setup.py bdist_wheel
+To upload the wheel to PyPi
+    twine upload dist/*.whl
 To repackage the previously built package as wheel (bypassing build):
     python setup.py bdist_wheel --repackage
 To install a develop version (egg with symbolic link):
@@ -37,7 +39,7 @@ from distutils.command.build_ext import build_ext as _build_ext
 from distutils.command.build import build as _build
 from distutils.errors import DistutilsSetupError
 from distutils.spawn import find_executable
-from distutils.sysconfig import get_python_inc, get_python_version
+from distutils.sysconfig import get_python_inc, get_python_version, get_config_var
 from distutils import log
 import os
 import sys
@@ -265,7 +267,8 @@ def enqueue_output(out, queue):
 def _log_buf(buf):
     if not buf:
         return
-    buf = buf.decode("latin-1")
+    if sys.stdout.encoding:
+        buf = buf.decode(sys.stdout.encoding)
     buf = buf.rstrip()
     lines = buf.splitlines()
     for line in lines:
@@ -455,7 +458,46 @@ class build(_build):
         """use cmake to build and install the extension
         """
         if cmake_path is None:
-            raise DistutilsSetupError("Cannot find cmake in the path. Please specify its path with --cmake parameter.")
+            cmake_install_url = "https://cmake.org/install/"
+            message = ("You can install cmake using the instructions at " +
+                       cmake_install_url)
+            msg_pkgmanager = ("You can install cmake on {0} using "
+                              "`sudo {1} install cmake`.")
+            if sys.platform == "darwin":
+                pkgmanagers = ('brew', 'port')
+                for manager in pkgmanagers:
+                    if find_executable(manager) is not None:
+                        message = msg_pkgmanager.format('OSX', manager)
+                        break
+            elif sys.platform.startswith('linux'):
+                try:
+                    import distro
+                except ImportError as err:
+                    import pip
+                    pip_exit = pip.main(['install', '-q', 'distro'])
+                    if pip_exit > 0:
+                        log.debug("Unable to install `distro` to identify "
+                                  "the recommended command. Falling back "
+                                  "to default error message.")
+                        distro = err
+                    else:
+                        import distro
+                if not isinstance(distro, ImportError):
+                    distname = distro.id()
+                    if distname in ('debian', 'ubuntu'):
+                        message = msg_pkgmanager.format(
+                            distname.title(), 'apt-get')
+                    elif distname in ('fedora', 'centos', 'redhat'):
+                        pkgmanagers = ("dnf", "yum")
+                        for manager in pkgmanagers:
+                            if find_executable(manager) is not None:
+                                message = msg_pkgmanager.format(
+                                    distname.title(), manager)
+                                break
+            raise DistutilsSetupError(
+                "Cannot find cmake, ensure it is installed and in the path.\n"
+                + message + "\n"
+                "You can also specify its path with --cmake parameter.")
 
         platform_arch = platform.architecture()[0]
         log.info("Detected Python architecture: %s" % platform_arch)
@@ -465,18 +507,25 @@ class build(_build):
         if sys.version_info >= (3, 0):
             cmake_extra_arch += ['-DPYTHON3=yes']
 
-        if platform_arch == '64bit' and sys.platform == "win32":
-            # 64bit build on Windows
-
-            if not generator_set:
-                # see if we can deduce the 64bit default generator
-                cmake_extra_arch += get_msvc_win64_generator()
-
-            # help cmake to find Python library in 64bit Python in Windows
-            #  because cmake is 32bit and cannot find PYTHON_LIBRARY from registry.
+        log.info("Detected platform: %s" % sys.platform)
+        if sys.platform == "darwin":
+            # build on OS X
             inc_dir = get_python_inc()
             cmake_extra_arch += ['-DPYTHON_INCLUDE_DIR={inc}'.format(inc=inc_dir)]
 
+            # by default, cmake will choose the system python lib in /usr/lib
+            # this checks the sysconfig and will correctly pick up a brewed python lib
+            # e.g. in /usr/local/Cellar
+            py_ver = get_python_version()
+            py_lib = os.path.join(get_config_var('LIBDIR'), 'libpython'+py_ver+'.dylib')
+            cmake_extra_arch += ['-DPYTHON_LIBRARY={lib}'.format(lib=py_lib)]
+
+        if sys.platform == "win32":
+            if platform_arch == '64bit' and  not generator_set:
+                cmake_extra_arch += get_msvc_win64_generator()
+
+            inc_dir = get_python_inc()
+            cmake_extra_arch += ['-DPYTHON_INCLUDE_DIR={inc}'.format(inc=inc_dir)]
             # this imitates cmake in path resolution
             py_ver = get_python_version()
             for ext in [py_ver.replace(".", "") + '.lib', py_ver + 'mu.lib', py_ver + 'm.lib', py_ver + 'u.lib']:
@@ -556,7 +605,7 @@ setup(
     version=read_version(),
     keywords=['dlib', 'Computer Vision', 'Machine Learning'],
     description='A toolkit for making real world machine learning and data analysis applications',
-    long_description=readme('README.txt'),
+    long_description=readme('README.md'),
     author='Davis King',
     author_email='davis@dlib.net',
     url='https://github.com/davisking/dlib',
